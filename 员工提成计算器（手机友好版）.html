@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>员工提成计算器 - 联系微信HRliu88888获取完整版</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  
+  <!-- 配置Tailwind自定义样式 -->
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#2563eb',
+            secondary: '#f97316',
+            accent: '#ff6b35',
+            neutral: '#f3f4f6',
+            dark: '#1e293b'
+          },
+          fontFamily: {
+            sans: ['Microsoft YaHei', '思源黑体', 'sans-serif']
+          }
+        }
+      }
+    }
+  </script>
+  
+  <style type="text/tailwindcss">
+    @layer utilities {
+      .content-auto {
+        content-visibility: auto;
+      }
+      .watermark {
+        position: fixed;
+        color: rgba(0, 0, 0, 0.1);
+        font-size: clamp(1.2rem, 5vw, 2rem); /* 水印自适应大小 */
+        font-weight: bold;
+        transform: rotate(-20deg);
+        z-index: 10;
+        pointer-events: none;
+        white-space: nowrap;
+      }
+      .calculator-container {
+        position: relative;
+        z-index: 20;
+      }
+      .提成阶梯-1 { background-color: rgba(37, 99, 235, 0.1); }
+      .提成阶梯-2 { background-color: rgba(37, 99, 235, 0.2); }
+      .提成阶梯-3 { background-color: rgba(37, 99, 235, 0.3); }
+      .提成阶梯-4 { background-color: rgba(37, 99, 235, 0.4); }
+      .contact-bar {
+        animation: pulse 3s infinite;
+      }
+      @keyframes pulse {
+        0% { background-color: rgba(255, 107, 53, 0.9); }
+        50% { background-color: rgba(255, 107, 53, 0.7); }
+        100% { background-color: rgba(255, 107, 53, 0.9); }
+      }
+      /* 移动端触控优化 */
+      .touch-friendly {
+        min-height: 48px;
+        display: flex;
+        align-items: center;
+      }
+    }
+  </style>
+</head>
+
+<body class="bg-gray-50 min-h-screen text-gray-800">
+  <!-- 顶部联系条 - 在移动端自动换行 -->
+  <div class="contact-bar text-white py-3 px-4 shadow-md">
+    <div class="container mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
+      <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-1">
+        <span class="flex items-center"><i class="fa fa-weixin mr-1"></i> 微信：HRliu88888</span>
+        <span class="flex items-center"><i class="fa fa-music mr-1"></i> 抖音：HR柳老师</span>
+      </div>
+      <div class="font-medium text-center">个性化定制您的专属需求</div>
+    </div>
+  </div>
+
+  <!-- 水印层 -->
+  <div id="watermarks" class="fixed inset-0 pointer-events-none z-10"></div>
+
+  <!-- 主内容区 - 移动端增加内边距 -->
+  <div class="calculator-container container mx-auto px-4 py-6 sm:py-8 relative z-20">
+    <header class="mb-6 sm:mb-8 text-center">
+      <h1 class="text-[clamp(1.5rem,6vw,2.5rem)] font-bold text-primary mb-2">员工提成计算器</h1>
+      <p class="text-gray-600 max-w-2xl mx-auto text-sm sm:text-base">
+        免费版功能有限，<span class="text-accent font-medium">联系微信HRliu88888</span>获取：
+        <br>无水印+高级计算规则+批量导入导出+数据备份 | 专属版本
+      </p>
+    </header>
+
+    <!-- 提成规则设置区 - 移动端单列布局 -->
+    <section class="bg-white rounded-xl shadow-md p-5 sm:p-6 mb-6 sm:mb-8">
+      <h2 class="text-xl font-bold text-dark mb-4 flex items-center">
+        <i class="fa fa-cog text-primary mr-2"></i>提成规则设置
+      </h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div>
+          <label class="block text-gray-700 mb-2 font-medium">提成基数类型</label>
+          <div class="flex flex-wrap gap-4 mb-4">
+            <label class="inline-flex items-center touch-friendly">
+              <input type="radio" name="baseType" value="revenue" checked class="mr-2 text-primary h-4 w-4">
+              <span>销售额</span>
+            </label>
+            <label class="inline-flex items-center touch-friendly">
+              <input type="radio" name="baseType" value="profit" class="mr-2 text-primary h-4 w-4">
+              <span>利润</span>
+            </label>
+          </div>
+
+          <label class="block text-gray-700 mb-2 font-medium">提成阶梯设置（可添加多阶梯）</label>
+          <div id="commissionSteps" class="space-y-4 mb-4">
+            <div class="step-item p-3 border border-gray-200 rounded-lg 提成阶梯-1">
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
+                <div>
+                  <label class="text-sm text-gray-500">起始金额(¥)</label>
+                  <input type="number" class="step-start w-full border rounded px-3 py-2 text-base" value="0" min="0">
+                </div>
+                <div>
+                  <label class="text-sm text-gray-500">结束金额(¥)</label>
+                  <input type="number" class="step-end w-full border rounded px-3 py-2 text-base" value="10000" min="0">
+                </div>
+                <div>
+                  <label class="text-sm text-gray-500">提成比例(%)</label>
+                  <input type="number" class="step-rate w-full border rounded px-3 py-2 text-base" value="3" min="0" max="100" step="0.1">
+                </div>
+              </div>
+            </div>
+            <div class="step-item p-3 border border-gray-200 rounded-lg 提成阶梯-2">
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
+                <div>
+                  <label class="text-sm text-gray-500">起始金额(¥)</label>
+                  <input type="number" class="step-start w-full border rounded px-3 py-2 text-base" value="10000" min="0">
+                </div>
+                <div>
+                  <label class="text-sm text-gray-500">结束金额(¥)</label>
+                  <input type="number" class="step-end w-full border rounded px-3 py-2 text-base" value="50000" min="0">
+                </div>
+                <div>
+                  <label class="text-sm text-gray-500">提成比例(%)</label>
+                  <input type="number" class="step-rate w-full border rounded px-3 py-2 text-base" value="5" min="0" max="100" step="0.1">
+                </div>
+              </div>
+            </div>
+            <div class="step-item p-3 border border-gray-200 rounded-lg 提成阶梯-3">
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
+                <div>
+                  <label class="text-sm text-gray-500">起始金额(¥)</label>
+                  <input type="number" class="step-start w-full border rounded px-3 py-2 text-base" value="50000" min="0">
+                </div>
+                <div>
+                  <label class="text-sm text-gray-500">结束金额(¥)</label>
+                  <input type="number" class="step-end w-full border rounded px-3 py-2 text-base" value="100000" min="0">
+                </div>
+                <div>
+                  <label class="text-sm text-gray-500">提成比例(%)</label>
+                  <input type="number" class="step-rate w-full border rounded px-3 py-2 text-base" value="8" min="0" max="100" step="0.1">
+                </div>
+              </div>
+            </div>
+          </div>
+          <button id="addStep" class="text-primary flex items-center text-sm hover:text-primary/80 transition touch-friendly">
+            <i class="fa fa-plus-circle mr-1"></i> 添加提成阶梯
+          </button>
+        </div>
+
+        <div>
+          <label class="block text-gray-700 mb-2 font-medium">额外规则</label>
+          <div class="space-y-3">
+            <div class="flex items-center touch-friendly">
+              <input type="checkbox" id="hasTeamBonus" class="mr-2 text-primary h-4 w-4">
+              <label for="hasTeamBonus">团队达标奖金（总业绩超10万额外奖励2%）</label>
+            </div>
+            <div class="flex items-center touch-friendly">
+              <input type="checkbox" id="hasNewCustomerBonus" class="mr-2 text-primary h-4 w-4">
+              <label for="hasNewCustomerBonus">新客户额外奖励（首单提成+1%）</label>
+            </div>
+            <div class="flex items-center touch-friendly">
+              <input type="checkbox" id="hasReturnDeduction" class="mr-2 text-primary h-4 w-4">
+              <label for="hasReturnDeduction">退货扣除（按退货金额扣减提成）</label>
+            </div>
+            
+            <div class="p-3 bg-blue-50 rounded-lg mt-4">
+              <h4 class="font-medium text-primary mb-2">提成计算公式预览</h4>
+              <p class="text-sm text-gray-600">
+                提成 = Σ(各阶梯金额 × 对应比例) 
+                <span id="teamBonusText" class="hidden"> + 团队奖金（若达标）</span>
+                <span id="newCustomerText" class="hidden"> + 新客户奖励（若适用）</span>
+                <span id="returnDeductionText" class="hidden"> - 退货扣除（若有）</span>
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 员工数据区 - 移动端优化滚动体验 -->
+    <section class="bg-white rounded-xl shadow-md p-5 sm:p-6 mb-6 sm:mb-8">
+      <div class="flex flex-wrap justify-between items-center mb-4 gap-2">
+        <h2 class="text-xl font-bold text-dark flex items-center">
+          <i class="fa fa-users text-primary mr-2"></i>员工销售数据
+        </h2>
+        <button id="addEmployee" class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary/90 transition flex items-center touch-friendly">
+          <i class="fa fa-plus mr-1"></i> 添加员工
+        </button>
+      </div>
+
+      <!-- 免费版限制提示 -->
+      <div class="bg-yellow-50 border-l-4 border-yellow-400 p-3 mb-4 text-sm">
+        <p class="text-yellow-700"><i class="fa fa-info-circle mr-1"></i> 免费版最多支持添加5名员工，联系微信HRliu88888解锁无限制版本</p>
+      </div>
+
+      <div id="employeesContainer" class="space-y-4 max-h-[400px] overflow-y-auto pr-2 -mx-2 px-2">
+        <!-- 员工1 -->
+        <div class="employee-item p-4 border border-gray-200 rounded-lg hover:shadow-sm transition">
+          <div class="grid grid-cols-1 md:grid-cols-6 gap-4 items-center">
+            <!-- 移动端每行显示一个字段，桌面端多列 -->
+            <div class="md:col-span-1">
+              <label class="text-sm text-gray-500">员工姓名</label>
+              <input type="text" class="employee-name w-full border rounded px-3 py-2 text-base" value="张三">
+            </div>
+            <div class="md:col-span-1">
+              <label class="text-sm text-gray-500">销售额(¥)</label>
+              <input type="number" class="employee-revenue w-full border rounded px-3 py-2 text-base" value="35000">
+            </div>
+            <div class="md:col-span-1">
+              <label class="text-sm text-gray-500">新客户数</label>
+              <input type="number" class="employee-new-customers w-full border rounded px-3 py-2 text-base" value="2" min="0">
+            </div>
+            <div class="md:col-span-1">
+              <label class="text-sm text-gray-500">退货金额(¥)</label>
+              <input type="number" class="employee-returns w-full border rounded px-3 py-2 text-base" value="1500" min="0">
+            </div>
+            <div class="md:col-span-1 employee-commission font-medium text-primary text-lg">¥1,675</div>
+            <div class="md:col-span-1 text-right">
+              <button class="delete-employee text-red-500 hover:text-red-700 transition p-2">
+                <i class="fa fa-trash text-lg"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 员工2 -->
+        <div class="employee-item p-4 border border-gray-200 rounded-lg hover:shadow-sm transition">
+          <div class="grid grid-cols-1 md:grid-cols-6 gap-4 items-center">
+            <div class="md:col-span-1">
+              <label class="text-sm text-gray-500">员工姓名</label>
+              <input type="text" class="employee-name w-full border rounded px-3 py-2 text-base" value="李四">
+            </div>
+            <div class="md:col-span-1">
+              <label class="text-sm text-gray-500">销售额(¥)</label>
+              <input type="number" class="employee-revenue w-full border rounded px-3 py-2 text-base" value="65000">
+            </div>
+            <div class="md:col-span-1">
+              <label class="text-sm text-gray-500">新客户数</label>
+              <input type="number" class="employee-new-customers w-full border rounded px-3 py-2 text-base" value="0" min="0">
+            </div>
+            <div class="md:col-span-1">
+              <label class="text-sm text-gray-500">退货金额(¥)</label>
+              <input type="number" class="employee-returns w-full border rounded px-3 py-2 text-base" value="3000" min="0">
+            </div>
+            <div class="md:col-span-1 employee-commission font-medium text-primary text-lg">¥4,760</div>
+            <div class="md:col-span-1 text-right">
+              <button class="delete-employee text-red-500 hover:text-red-700 transition p-2">
+                <i class="fa fa-trash text-lg"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 计算结果与导出区 - 移动端按钮自适应宽度 -->
+    <section class="bg-white rounded-xl shadow-md p-5 sm:p-6 mb-6 sm:mb-8">
+      <h2 class="text-xl font-bold text-dark mb-4 flex items-center">
+        <i class="fa fa-bar-chart text-primary mr-2"></i>计算结果
+      </h2>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+        <div class="p-4 bg-neutral rounded-lg text-center">
+          <p class="text-gray-600 text-sm">团队总销售额</p>
+          <p id="totalRevenue" class="text-2xl font-bold text-dark">¥100,000</p>
+        </div>
+        <div class="p-4 bg-neutral rounded-lg text-center">
+          <p class="text-gray-600 text-sm">团队总提成</p>
+          <p id="totalCommission" class="text-2xl font-bold text-secondary">¥6,435</p>
+        </div>
+        <div class="p-4 bg-neutral rounded-lg text-center">
+          <p class="text-gray-600 text-sm">平均提成</p>
+          <p id="avgCommission" class="text-2xl font-bold text-primary">¥3,218</p>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap justify-center gap-4">
+        <button id="calculateAll" class="bg-primary text-white px-6 py-3 rounded-lg hover:bg-primary/90 transition flex items-center justify-center w-full sm:w-auto touch-friendly">
+          <i class="fa fa-calculator mr-2"></i> 重新计算所有提成
+        </button>
+        <button id="exportExcel" class="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition flex items-center justify-center w-full sm:w-auto touch-friendly">
+          <i class="fa fa-file-excel-o mr-2"></i> 导出Excel报表
+        </button>
+      </div>
+    </section>
+
+    <footer class="text-center text-gray-500 text-sm py-4 px-4">
+      <p>2023 版权所有 | 未经授权禁止复制、修改和分发 | 侵权必究</p>
+      <p class="mt-1">联系微信HRliu88888获取专属定制版本</p>
+    </footer>
+  </div>
+
+  <script>
+    // 生成水印（适配移动端）
+    function createWatermarks() {
+      const watermarksContainer = document.getElementById('watermarks');
+      const watermarkText = 'VX：HRliu88888';
+      // 移动端减少水印数量，避免过于密集
+      const isMobile = window.innerWidth < 640;
+      const countX = isMobile ? 4 : 6; 
+      const countY = isMobile ? 8 : 10;
+      
+      watermarksContainer.innerHTML = '';
+      
+      const stepX = 100 / (countX - 1);
+      const stepY = 100 / (countY - 1);
+      
+      for (let i = 0; i < countX; i++) {
+        for (let j = 0; j < countY; j++) {
+          const watermark = document.createElement('div');
+          watermark.className = 'watermark';
+          watermark.textContent = watermarkText;
+          watermark.style.left = `${i * stepX}%`;
+          watermark.style.top = `${j * stepY}%`;
+          watermarksContainer.appendChild(watermark);
+        }
+      }
+    }
+
+    // 检查员工数量限制
+    function checkEmployeeLimit() {
+      const maxEmployees = 5;
+      const currentCount = document.querySelectorAll('.employee-item').length;
+      const addButton = document.getElementById('addEmployee');
+      
+      if (currentCount >= maxEmployees) {
+        addButton.disabled = true;
+        addButton.classList.add('opacity-50', 'cursor-not-allowed');
+        return false;
+      } else {
+        addButton.disabled = false;
+        addButton.classList.remove('opacity-50', 'cursor-not-allowed');
+        return true;
+      }
+    }
+
+    // 初始化页面
+    document.addEventListener('DOMContentLoaded', function() {
+      // 创建水印
+      createWatermarks();
+      window.addEventListener('resize', createWatermarks);
+      
+      // 检查员工数量限制
+      checkEmployeeLimit();
+      
+      // 额外规则显示控制
+      const hasTeamBonus = document.getElementById('hasTeamBonus');
+      const hasNewCustomerBonus = document.getElementById('hasNewCustomerBonus');
+      const hasReturnDeduction = document.getElementById('hasReturnDeduction');
+      
+      const teamBonusText = document.getElementById('teamBonusText');
+      const newCustomerText = document.getElementById('newCustomerText');
+      const returnDeductionText = document.getElementById('returnDeductionText');
+      
+      hasTeamBonus.addEventListener('change', function() {
+        teamBonusText.classList.toggle('hidden', !this.checked);
+      });
+      
+      hasNewCustomerBonus.addEventListener('change', function() {
+        newCustomerText.classList.toggle('hidden', !this.checked);
+      });
+      
+      hasReturnDeduction.addEventListener('change', function() {
+        returnDeductionText.classList.toggle('hidden', !this.checked);
+      });
+      
+      // 添加提成阶梯
+      document.getElementById('addStep').addEventListener('click', function() {
+        const stepsContainer = document.getElementById('commissionSteps');
+        const stepItems = stepsContainer.querySelectorAll('.step-item');
+        const lastStep = stepItems[stepItems.length - 1];
+        
+        const lastEndValue = lastStep.querySelector('.step-end').value;
+        const newEndValue = parseInt(lastEndValue) + 50000;
+        
+        const newStep = document.createElement('div');
+        newStep.className = `step-item p-3 border border-gray-200 rounded-lg 提成阶梯-${(stepItems.length % 4) + 1}`;
+        newStep.innerHTML = `
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
+            <div>
+              <label class="text-sm text-gray-500">起始金额(¥)</label>
+              <input type="number" class="step-start w-full border rounded px-3 py-2 text-base" value="${lastEndValue}" min="0">
+            </div>
+            <div>
+              <label class="text-sm text-gray-500">结束金额(¥)</label>
+              <input type="number" class="step-end w-full border rounded px-3 py-2 text-base" value="${newEndValue}" min="0">
+            </div>
+            <div>
+              <label class="text-sm text-gray-500">提成比例(%)</label>
+              <input type="number" class="step-rate w-full border rounded px-3 py-2 text-base" value="${Math.min(3 + stepItems.length * 1.5, 20)}" min="0" max="100" step="0.1">
+            </div>
+          </div>
+        `;
+        
+        stepsContainer.appendChild(newStep);
+      });
+      
+      // 添加员工
+      document.getElementById('addEmployee').addEventListener('click', function() {
+        if (!checkEmployeeLimit()) {
+          alert('免费版最多只能添加5名员工，联系微信HRliu88888获取无限制版本');
+          return;
+        }
+        
+        const container = document.getElementById('employeesContainer');
+        const newEmployee = document.createElement('div');
+        newEmployee.className = 'employee-item p-4 border border-gray-200 rounded-lg hover:shadow-sm transition';
+        newEmployee.innerHTML = `
+          <div class="grid grid-cols-1 md:grid-cols-6 gap-4 items-center">
+            <div class="md:col-span-1">
+              <label class="text-sm text-gray-500">员工姓名</label>
+              <input type="text" class="employee-name w-full border rounded px-3 py-2 text-base" placeholder="输入姓名">
+            </div>
+            <div class="md:col-span-1">
+              <label class="text-sm text-gray-500">销售额(¥)</label>
+              <input type="number" class="employee-revenue w-full border rounded px-3 py-2 text-base" value="0" min="0">
+            </div>
+            <div class="md:col-span-1">
+              <label class="text-sm text-gray-500">新客户数</label>
+              <input type="number" class="employee-new-customers w-full border rounded px-3 py-2 text-base" value="0" min="0">
+            </div>
+            <div class="md:col-span-1">
+              <label class="text-sm text-gray-500">退货金额(¥)</label>
+              <input type="number" class="employee-returns w-full border rounded px-3 py-2 text-base" value="0" min="0">
+            </div>
+            <div class="md:col-span-1 employee-commission font-medium text-primary text-lg">¥0</div>
+            <div class="md:col-span-1 text-right">
+              <button class="delete-employee text-red-500 hover:text-red-700 transition p-2">
+                <i class="fa fa-trash text-lg"></i>
+              </button>
+            </div>
+          </div>
+        `;
+        
+        container.appendChild(newEmployee);
+        bindEmployeeEvents(newEmployee);
+        checkEmployeeLimit();
+      });
+      
+      // 绑定员工相关事件
+      function bindEmployeeEvents(employeeElement) {
+        // 输入变化时重新计算
+        const inputs = employeeElement.querySelectorAll('input');
+        inputs.forEach(input => {
+          input.addEventListener('input', calculateEmployeeCommission);
+        });
+        
+        // 删除员工
+        const deleteBtn = employeeElement.querySelector('.delete-employee');
+        deleteBtn.addEventListener('click', function() {
+          employeeElement.remove();
+          calculateTotalStats();
+          checkEmployeeLimit();
+        });
+      }
+      
+      // 为现有员工绑定事件
+      document.querySelectorAll('.employee-item').forEach(bindEmployeeEvents);
+      
+      // 计算单个员工提成
+      function calculateEmployeeCommission() {
+        const employeeItem = this.closest('.employee-item');
+        const revenue = parseFloat(employeeItem.querySelector('.employee-revenue').value) || 0;
+        const newCustomers = parseInt(employeeItem.querySelector('.employee-new-customers').value) || 0;
+        const returns = parseFloat(employeeItem.querySelector('.employee-returns').value) || 0;
+        
+        let commission = 0;
+        const stepItems = document.querySelectorAll('.step-item');
+        
+        // 计算基础提成（多阶梯）
+        stepItems.forEach(step => {
+          const start = parseFloat(step.querySelector('.step-start').value) || 0;
+          const end = parseFloat(step.querySelector('.step-end').value) || 0;
+          const rate = parseFloat(step.querySelector('.step-rate').value) || 0;
+          
+          if (revenue > start) {
+            const amountInStep = Math.min(revenue, end) - start;
+            if (amountInStep > 0) {
+              commission += amountInStep * (rate / 100);
+            }
+          }
+        });
+        
+        // 最后一个阶梯之后的部分
+        const lastStep = stepItems[stepItems.length - 1];
+        const lastEnd = parseFloat(lastStep.querySelector('.step-end').value) || 0;
+        const lastRate = parseFloat(lastStep.querySelector('.step-rate').value) || 0;
+        
+        if (revenue > lastEnd) {
+          commission += (revenue - lastEnd) * (lastRate / 100);
+        }
+        
+        // 新客户奖励
+        if (hasNewCustomerBonus.checked && newCustomers > 0) {
+          commission += revenue * (1 / 100) * newCustomers;
+        }
+        
+        // 退货扣除
+        if (hasReturnDeduction.checked && returns > 0) {
+          const avgRate = commission / revenue * 100 || 0;
+          commission -= returns * (avgRate / 100);
+        }
+        
+        // 确保提成不为负
+        commission = Math.max(0, commission);
+        
+        // 更新显示
+        employeeItem.querySelector('.employee-commission').textContent = `¥${commission.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
+        
+        // 更新总计
+        calculateTotalStats();
+      }
+      
+      // 计算总计数据
+      function calculateTotalStats() {
+        let totalRevenue = 0;
+        let totalCommission = 0;
+        let employeeCount = 0;
+        
+        document.querySelectorAll('.employee-item').forEach(item => {
+          totalRevenue += parseFloat(item.querySelector('.employee-revenue').value) || 0;
+          const commissionText = item.querySelector('.employee-commission').textContent;
+          totalCommission += parseFloat(commissionText.replace(/[^\d.-]/g, '')) || 0;
+          employeeCount++;
+        });
+        
+        // 团队奖金
+        if (hasTeamBonus.checked && totalRevenue >= 100000) {
+          totalCommission += totalRevenue * 0.02;
+        }
+        
+        // 更新显示
+        document.getElementById('totalRevenue').textContent = `¥${totalRevenue.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
+        document.getElementById('totalCommission').textContent = `¥${totalCommission.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
+        
+        const avgCommission = employeeCount > 0 ? totalCommission / employeeCount : 0;
+        document.getElementById('avgCommission').textContent = `¥${avgCommission.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
+      }
+      
+      // 重新计算所有提成
+      document.getElementById('calculateAll').addEventListener('click', function() {
+        document.querySelectorAll('.employee-item input').forEach(input => {
+          input.dispatchEvent(new Event('input'));
+        });
+        
+        // 添加计算动画效果
+        const totalElements = document.querySelectorAll('#totalRevenue, #totalCommission, #avgCommission');
+        totalElements.forEach(el => {
+          el.classList.add('scale-110', 'text-secondary');
+          setTimeout(() => {
+            el.classList.remove('scale-110', 'text-secondary');
+          }, 500);
+        });
+      });
+      
+      // 导出Excel
+      document.getElementById('exportExcel').addEventListener('click', function() {
+        const data = [
+          ['员工姓名', '销售额(¥)', '新客户数', '退货金额(¥)', '提成金额(¥)', '签字确认']
+        ];
+        
+        document.querySelectorAll('.employee-item').forEach(item => {
+          const name = item.querySelector('.employee-name').value || '未命名';
+          const revenue = parseFloat(item.querySelector('.employee-revenue').value) || 0;
+          const newCustomers = parseInt(item.querySelector('.employee-new-customers').value) || 0;
+          const returns = parseFloat(item.querySelector('.employee-returns').value) || 0;
+          const commission = parseFloat(item.querySelector('.employee-commission').textContent.replace(/[^\d.-]/g, '')) || 0;
+          
+          data.push([name, revenue, newCustomers, returns, commission, '']);
+        });
+        
+        // 添加总计行
+        const totalRevenue = parseFloat(document.getElementById('totalRevenue').textContent.replace(/[^\d.-]/g, '')) || 0;
+        const totalCommission = parseFloat(document.getElementById('totalCommission').textContent.replace(/[^\d.-]/g, '')) || 0;
+        
+        data.push(['', '', '', '总计', '', '']);
+        data.push(['', totalRevenue, '', '', totalCommission, '']);
+        
+        // 创建工作表
+        const ws = XLSX.utils.aoa_to_sheet(data);
+        
+        // 设置边框样式
+        const borderStyle = {
+          top: { style: 'thin' },
+          bottom: { style: 'thin' },
+          left: { style: 'thin' },
+          right: { style: 'thin' }
+        };
+        
+        // 获取数据范围
+        const range = XLSX.utils.decode_range(ws['!ref']);
+        
+        // 为所有单元格添加边框
+        for (let R = range.s.r; R <= range.e.r; R++) {
+          for (let C = range.s.c; C <= range.e.c; C++) {
+            const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+            
+            if (!ws[cellAddress]) {
+              ws[cellAddress] = { t: 's', v: '' };
+            }
+            
+            ws[cellAddress].s = {
+              border: borderStyle,
+              alignment: { vertical: 'center', horizontal: 'center' }
+            };
+            
+            if (R === 0) {
+              ws[cellAddress].s.font = { bold: true };
+              ws[cellAddress].s.fill = { fgColor: { rgb: 'E0E0E0' } };
+            }
+            
+            if (R >= data.length - 2) {
+              ws[cellAddress].s.font = { bold: true };
+            }
+          }
+        }
+        
+        // 调整列宽
+        ws['!cols'] = [
+          { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 15 }
+        ];
+        
+        // 创建工作簿并添加工作表
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "提成计算表");
+        
+        // 导出文件
+        XLSX.writeFile(wb, `员工提成计算_${new Date().toLocaleDateString()}.xlsx`);
+      });
+    });
+  </script>
+</body>
+</html>
+    
